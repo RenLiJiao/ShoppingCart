@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Shopping</title>
+	<script type = "text/javascript" src="./js/jquery-1.11.3.js"></script>
+	<script type = "text/javascript" src="./js/jquery.cookie.js"></script>
+	<script type = "text/javascript" src="./js/parabola.js"></script>
+	<link rel="stylesheet" href="./css/main.css">
+	<script>
+		$(function () {
+			sumGoods();//页面载入显示数量与购物车信息
+			sc_info();
+			//引入data.json中的数据使用ECMA6字符串进行节点循环创建
+			$.ajax({
+				url:"data.json",
+				success:function(arr){
+					//JQ自动解析json数据，直接使用即可
+					for (var i = 0; i < arr.length; i++) {
+						var node = $(`<li class="goods_item">
+										<div class="goods_pic">
+											<img src="${arr[i].img}" alt="">
+										</div>
+										<div class="goods_title">
+											<p>${arr[i].title}</p>
+										</div>
+										<div class="sc">
+											<div id="${arr[i].id}" class="sc_btn">加入购物车</div>
+										</div>
+									</li>`);
+						node.appendTo(".goods_box ul");
+					}
+				},
+				error:function(msg){
+					console.log(msg);
+				}
+			})
+
+			//给加入购物车按钮添加点击事件
+			//由于节点是后来载入数据动态创建的，所有直接使用元素选择器根本找不到按钮
+			//通过添加事件委托来实现点击事件
+			$(".goods_box ul").on("click",".sc_btn",function(){
+				ballMove(this);//给每个按钮添加点击事件
+				//通过创建节点时给一开始添加的id
+				// alert(this.id);
+				/* 
+					使用cookie存储购物车的数据信息
+						cookie大小有限制，只能添加字符串数据而不能是多媒体文件
+						1，存储商品的id与数量即可
+						2，cookie只能存储字符串，将数据结构转成json格式的字符串再进行存储
+						[{id:0,num:1},[id:1,num:1]....]  每个商品都是一个对象，数据存储加入购物车的对象的id和数量
+						最后转成json字符串进行cookie缓存
+				*/
+				let id = this.id;
+				var first = $.cookie("goods") == null ? true : false;
+				//第一次添加新建cookie，第一次把商品添加进购物车，而不是这个商品第一次添加
+				if (first) {
+					/* $.cookie("goods",`[{"id":${id},"num":1}]`,{
+						expires:7
+					}); 也可以换一种写法，写数据结构让系统转成json格式字符串*/
+					var arr = [{"id":id,"num":1}];
+					$.cookie("goods",JSON.stringify(arr),{
+						expires:7
+					});
+				}else{
+					//不是第一次添加，把cookie取出来
+					var cookieStr = $.cookie("goods");
+					var cookieArr = JSON.parse(cookieStr);
+
+					//定义一个变量，初始为false，假设这个商品在购物车没有记录
+					var flag = false;
+					//通过循环去判断是否有符合条件的元素，有就说明之前添加过
+					//flag设为true，num+1，没有则重新给cookie数组重新push一个对象
+					for (let i = 0; i < cookieArr.length; i++) {
+						if (id == cookieArr[i].id) {
+							flag = true;
+							cookieArr[i].num++;
+							break;
+						}
+					}
+					//如果没有添加过
+					if (!flag) {
+						cookieArr.push({id:id,num:1});
+					}
+					//将数据存回cookie
+					$.cookie("goods",JSON.stringify(cookieArr),{
+						expires:7
+					});
+				}
+				sumGoods();//加入购物车刷新数量与购物车信息
+				sc_info();
+			})
+
+			//删除按钮存在于页面加载之后通过cookie加载的，而且后来还会更新数量，通过事件委托
+			$(".sc_right ul").on("click",".sc_goodsDelBtn",function(){
+				/* 
+					1.页面上存在的li删除掉
+					2.cookie中的对象删除掉
+				*/
+				var id = $(this).closest("li").remove().attr("id");
+				var cookieStr = $.cookie("goods");
+				var cookieArr = JSON.parse(cookieStr);
+				for (let i = 0; i < cookieArr.length; i++) {
+					if (id == cookieArr[i].id) {
+						cookieArr.splice(i,1);
+						break;
+					}
+				}
+				//判断数组是否为空，如果为空直接把cookie删除
+				if (!cookieArr.length) {
+					$.cookie("goods",null)
+				}else{
+					$.cookie("goods",JSON.stringify(cookieArr),{
+						expires:7
+					});
+				}
+				sumGoods();
+			})
+			//通过事件委托实现购物车商品数量的加和减
+			$(".sc_right ul").on("click","em",function(){
+				//获取当前点击商品的id，以便于修改cookie里的值
+				var id = $(this).closest("li").attr("id");
+				var cookieStr = $.cookie("goods");
+				var cookieArr = JSON.parse(cookieStr);
+				
+				for (let i = 0; i < cookieArr.length; i++) {
+					if (id == cookieArr[i].id) {
+						if (this.innerHTML == "+") {
+							cookieArr[i].num++;
+						}else{
+							if (cookieArr[i].num == 1) {
+								alert("不能再减少了");
+							} else {
+								cookieArr[i].num--;
+							}
+						}
+					}
+					$(this).siblings("span").html(cookieArr[i].num);
+					$.cookie("goods",JSON.stringify(cookieArr),{
+						erpires:7
+					});
+					sumGoods();
+					break;
+				}
+			})
+
+			//添加清空购物车功能
+			$("#clearShopCar").click(function(){
+				$.cookie("goods",null);
+				$(".sc_right ul").empty();
+				$(".sc_right .sc_num").html(0);
+			})
+
+			//给右侧购物车添加鼠标移入移出事件
+			$(".sc_right").mouseenter(function(){
+				$(this).stop(true).animate({
+					right:0
+				},500);
+			}).mouseleave(function(){
+				$(this).stop(true).animate({
+					right:-270
+				},500);
+			})
+
+			/* 
+				加载购物车里的数据，数据id和数量存储在cookie里
+				进行一次json数据请求，判断哪些商品在cookie里，将cookie里对应数据拿出来
+			*/
+			function sc_info(){
+				//每次运行sc_info函数时，首先清空上次sc_right ul下的li数据
+				// $(".sc_right").html("");
+				//或者
+				$(".sc_right ul").empty();
+				$.ajax({
+					url:"data.json",
+					success:function(arr){
+						var cookieStr = $.cookie("goods");
+						var newArr = []; //用来存放符合条件的商品的id
+						if (cookieStr) {
+							var cookieArr = JSON.parse(cookieStr);
+							for (let i = 0; i < arr.length; i++) {
+								for (let j = 0; j < cookieArr.length; j++) {
+									//双层循环，一一对比cookieArr[i]的id和json下载下来的对象
+									//arr[i].id是否相等
+									if (arr[i].id == cookieArr[j].id) {
+										//给arr新建一个属性num接收cookieArr[j]里存储的数量
+										arr[i].num = cookieArr[j].num;
+										//将符合条件的json数组的对象存入newArr中
+										newArr.push(arr[i]);
+									}
+								}
+							}
+							for (let k = 0; k < newArr.length; k++) {
+								let node = $(`<li id="${newArr[k].id}">
+												<div class="sc_goodsPic">
+													<img src="${newArr[k].img}" alt="">
+												</div>
+												<div class="sc_goodsTitle">
+													${newArr[k].title}
+												</div>
+												<div class="sc_goodsNum">
+													数量：<em>+</em><span>${newArr[k].num}</span><em>-</em>
+													</div>
+												<div class="sc_goodsBtn">购买</div>
+												<div class="sc_goodsDelBtn" id = "del">删除</div>
+											</li>`);
+								$(node).appendTo(".sc_right ul");
+							}
+						}
+					},
+					error:function(msg){
+						console.log(msg);
+					}
+				})
+			}
+
+			//计算cookie下的各个对象的num加起来的总数
+			function sumGoods(){
+				var cookieStr = $.cookie("goods");
+				if (cookieStr) {
+					var sum = 0;
+					var cookieArr = JSON.parse(cookieStr);
+					for (let i = 0; i < cookieArr.length; i++) {
+						sum += cookieArr[i].num; 
+					}
+					$(".sc_right .sc_num").html(sum);
+				}else{
+					$(".sc_right .sc_num").html(0);
+				}
+			}
+			
+			//给添加购物车点击事件调加动态特效
+			function ballMove(oBtn){
+				$("#ball").css({
+					display:"block",
+					top:$(oBtn).offset().top,
+					left:$(oBtn).offset().left
+				});
+
+				//计算页面上的商品到购物车的相对位置
+				var X = $(".sc_right .sc_pic").offset().left - $("#ball").offset().left;
+				var Y = $(".sc_right .sc_pic").offset().top - $("#ball").offset().top;
+				//创建一个抛物面对象
+				var ball = new Parabola({
+					el:"#ball",
+					offset:	[X,Y],
+					// targetEl:".sc_right"
+					duration:500,
+					curvature:0.0005,	//抛物线曲率
+					callback:function(){
+						//回调函数，将小球隐藏掉
+						$("#ball").hide();
+					}
+				});
+				ball.start();
+			}
+		})
+	</script>
+</head>
+<body>
+<!-- 商品列表 -->
+	<div class="goods_box">
+		
+		<ul>
+			<!-- <li class="goods_item">
+				<div class="goods_pic">
+					<img src="" alt="">
+				</div>
+				<div class="goods_title">
+					<p>测试文字</p>
+				</div>
+				<div class="sc">
+					<div id="" class="sc_btn">加入购物车</div>
+				</div>
+			</li> -->
+		</ul>
+
+	</div>
+
+<!-- 右边购物车 -->
+	<div class="sc_right">
+		<button id="clearShopCar">清空购物车</button>
+		<div class="sc_pic">
+			<!-- 购物车内商品的数量 -->
+			<div class="sc_num">
+			</div>
+		</div>
+
+		<ul>
+			<!-- <li>
+				<div class="sc_goodsPic">
+					<img src="" alt="">
+				</div>
+				<div class="sc_goodsTitle">
+					<p></p>
+				</div>
+				<div class="sc_goodsNum">商品数量：1</div>
+				<div class="sc_goodsBtn">购买</div>
+			</li> -->
+		</ul>
+	</div>
+	<span id="ball"></span>
+</body>
+</html
+
+
+
+
+
+
+

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Shopping</title>
+	<script type = "text/javascript" src="./js/jquery-1.11.3.js"></script>
+	<script type = "text/javascript" src="./js/jquery.cookie.js"></script>
+	<script type = "text/javascript" src="./js/parabola.js"></script>
+	<link rel="stylesheet" href="./css/main.css">
+	<script>
+		$(function () {
+			sumGoods();
+			sc_info();
+			//引入data.json中的数据使用ECMA6字符串进行节点循环创建
+			$.ajax({
+				url:"data.json",
+				success:function(arr){
+					//JQ自动解析json数据，直接使用即可
+					for (var i = 0; i < arr.length; i++) {
+						var node = $(`<li class="goods_item">
+										<div class="goods_pic">
+											<img src="${arr[i].img}" alt="">
+										</div>
+										<div class="goods_title">
+											<p>${arr[i].title}</p>
+										</div>
+										<div class="sc">
+											<div id="${arr[i].id}" class="sc_btn">加入购物车</div>
+										</div>
+									</li>`);
+						node.appendTo(".goods_box ul");
+					}
+				},
+				error:function(msg){
+					console.log(msg);
+				}
+			})
+
+			//给加入购物车按钮添加点击事件
+			//由于节点是后来载入数据动态创建的，所有直接使用元素选择器根本找不到按钮
+			//通过添加事件委托来实现点击事件
+			$(".goods_box ul").on("click",".sc_btn",function(){
+				ballMove(this);
+                var id = this.id;
+                var first = $.cookie("goodss") == null ? true : false;
+
+                if (first) {
+                    $.cookie("goodss",`[{"id":${id},"num":1}]`,{
+                        expires:7
+                    });
+                }else{
+                    var flag = false;//假设之前没有添加过这个商品
+                    var jsonStr = $.cookie("goodss");
+                    var jsonArr = JSON.parse(jsonStr);
+                    for (let i = 0; i < jsonArr.length; i++) {
+                        if (id == jsonArr[i].id) {
+                            flag = true;
+                            jsonArr[i].num++;
+                            break;
+                        }    
+                    }
+                    if (!flag) {
+                        jsonArr.push({id:id,num:1});
+                    }
+                    $.cookie("goodss",JSON.stringify(jsonArr),{
+                        expires:7
+                    });
+                }
+				sumGoods();
+				sc_info();
+			})
+			//通过事件委托实现删除按钮的功能
+			$(".sc_right ul").on("click",".sc_goodsDelBtn",function(){
+				/* 
+					删除ul下的li
+					删除cookie中的数据
+				*/
+				//删除li
+				var id = $(this).closest("li").remove().attr("id");
+				//删除cookie中的数据
+				var cookieStr = $.cookie("goodss");
+				var cookieArr = JSON.parse(cookieStr);
+				for (let i = 0; i < cookieArr.length; i++) {
+						if (id == cookieArr[i].id) {
+							cookieArr.splice(i,1);
+						}
+					}
+				if (!cookieArr.length) {
+					$.cookie("goodss",null);
+				}else{
+					$.cookie("goodss",JSON.stringify(cookieArr),{
+						expires:7
+					});
+				}
+
+				sumGoods();
+			})
+			//通过事件委托实现购物车商品的加和减
+			$(".sc_right ul").on("click","em",function(){
+
+				var id = $(this).closest("li").attr("id");
+				var cookieStr = $.cookie("goodss");
+				var cookieArr = JSON.parse(cookieStr);
+
+				for (let i = 0; i < cookieArr.length; i++) {
+					if (id == cookieArr[i].id) {
+						if (this.innerHTML == "+") {
+							cookieArr[i].num++;
+						}else{
+							if (cookieArr[i].num == 1) {
+								alert("商品已经不能再减少了")
+							}else{
+								cookieArr[i].num--;
+							}
+						}
+					}
+					$.cookie("goodss",JSON.stringify(cookieArr),{
+						expires:7
+					});
+					$(this).siblings("span").html(cookieArr[i].num);
+					sumGoods();
+					break;
+				}
+			})
+			//设置购物车移入移出事件
+			$(".sc_right").mouseenter(function(){
+				$(".sc_right").stop(true).animate({
+					right:0
+				},500);
+			}).mouseleave(function(){
+				$(".sc_right").stop(true).animate({
+					right:-270
+				},500);
+			})
+			//计算cookie里的商品总数
+			function sumGoods(){
+				var cookieStr = $.cookie("goodss");
+				if (cookieStr) {
+					var sum = 0;
+					var cookieArr = JSON.parse(cookieStr);
+					for (let i = 0; i < cookieArr.length; i++) {
+						sum += cookieArr[i].num;
+					}
+					$(".sc_right .sc_num").html(sum);
+				}else{
+					$(".sc_right .sc_num").html(0);
+				}
+			}
+			//加载购物车数据
+			function sc_info(){
+				$(".sc_right ul").empty();
+				$.ajax({
+					url:"data.json",
+					success:function(arr){
+						var cookieStr = $.cookie("goodss");
+						var newArr = [];
+						if (cookieStr) {
+							var cookirArr = JSON.parse(cookieStr);
+							for (let i = 0; i < arr.length; i++) {
+								for (let j = 0; j < cookirArr.length; j++) {
+									if (arr[i].id == cookirArr[j].id) {
+										arr[i].num = cookirArr[j].num;
+										newArr.push(arr[i]);
+									}
+								}
+							}
+							for (let k = 0; k < newArr.length; k++) {
+								var node = $(`<li id="${newArr[k].id}">
+												<div class="sc_goodsPic">
+													<img src="${newArr[k].img}" alt="">
+												</div>
+												<div class="sc_goodsTitle">
+													<p>${newArr[k].title}</p>
+												</div>
+												<div class="sc_goodsNum">
+													数量：<em>+</em><span>${newArr[k].num}</span>
+													<em>-</em>
+												</div>
+												<div class="sc_goodsBtn">购买</div>
+												<div class="sc_goodsDelBtn">删除</div>
+											</li>`);
+								$(node).appendTo(".sc_right ul");
+							}
+						}
+					},
+					error:function(msg){
+						console.log(msg);
+					}
+				})
+			}
+
+			function ballMove(oBtn){
+				$("#ball").css({
+					display:"block",
+					top:$(oBtn).offset().top,
+					left:$(oBtn).offset().left
+				});
+
+				//计算页面上的商品到购物车的相对位置
+				var X = $(".sc_right .sc_pic").offset().left - $("#ball").offset().left;
+				var Y = $(".sc_right .sc_pic").offset().top - $("#ball").offset().top;
+				//创建一个抛物面对象
+				var ball = new Parabola({
+					el:"#ball",
+					offset:	[X,Y],
+					// targetEl:".sc_right"
+					duration:500,
+					curvature:0.0005,	//抛物线曲率
+					callback:function(){
+						//回调函数，将小球隐藏掉
+						$("#ball").hide();
+					}
+				});
+				ball.start();
+			}
+		})
+	</script>
+</head>
+<body>
+<!-- 商品列表 -->
+	<div class="goods_box">
+		
+		<ul>
+			<!-- <li class="goods_item">
+				<div class="goods_pic">
+					<img src="" alt="">
+				</div>
+				<div class="goods_title">
+					<p>测试文字</p>
+				</div>
+				<div class="sc">
+					<div id="" class="sc_btn">加入购物车</div>
+				</div>
+			</li> -->
+		</ul>
+
+	</div>
+
+<!-- 右边购物车 -->
+	<div class="sc_right">
+		<button id="clearShopCar">清空购物车</button>
+		<div class="sc_pic">
+			<!-- 购物车内商品的数量 -->
+			<div class="sc_num">
+				0
+			</div>
+		</div>
+
+		<ul>
+			<!-- <li>
+				<div class="sc_goodsPic">
+					<img src="" alt="">
+				</div>
+				<div class="sc_goodsTitle">
+					<p></p>
+				</div>
+				<div class="sc_goodsNum">商品数量：1</div>
+				<div class="sc_goodsBtn">购买</div>
+			</li> -->
+		</ul>
+	</div>
+	<span id="ball"></span>
+</body>
+</html
+
+
+
+
